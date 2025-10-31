@@ -6,7 +6,7 @@ import { GlobalStyle } from '../styles/global-style'
 import { themeLight, themeDark } from '../styles/theme'
 import { useUiStore } from '../config/ui-store'
 import AuthProvider from '../shared/auth/AuthProvider'
-
+import { getDemoFlag } from '../lib/demo-flag'
 // 토스트 & 배지
 import { ToastHost, useToasts } from '../ui/Toast'           // Toast.tsx가 src/ui에 있을 때 경로
 import { useAlertBadge } from '../config/alert-badge-store'
@@ -36,6 +36,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   // 실시간 알림: DEV+MSW면 MockWS, 아니면 실제 WS (열려있을 때만)
   useEffect(() => {
+    const demo = getDemoFlag()            // DEV/PROD 공통 플래그( ?demo=1, localStorage, env )
     const onMsg = (msg: any) => {
       if (msg?.type === 'alert.created') {
         push(`New alert: ${msg.alert.severity.toUpperCase()} on ${msg.alert.entity}`)
@@ -47,29 +48,23 @@ export function AppProviders({ children }: { children: ReactNode }) {
     let mock: MockWS | undefined
     let ws: WebSocket | undefined
 
-    if (import.meta.env.DEV && mswEnabled) {
+    if (demo) {
       mock = new MockWS()
-      mock.start(7000)
+      mock.start(7000)                    // 7초마다 alert.created 송출
       off = mock.on(onMsg)
       console.log('[WS] MockWS enabled (7s)')
-      return () => {
-        off?.()
-        mock?.stop()
-      }
+      return () => { off?.(); mock?.stop() }
     }
 
-    // 실제 백엔드 WS가 준비되면 VITE_WS_BASE_URL을 설정하고 아래 라인을 그대로 사용하세요.
-    // 예) VITE_WS_BASE_URL=ws://localhost:8000/v1/stream  → openStream('alerts', ...)
-    const wsBase = import.meta.env.VITE_WS_BASE_URL as string | undefined
-    if (wsBase) {
-      ws = openStream('alerts', onMsg)
-      console.log('[WS] real WebSocket connected:', wsBase)
+    const base = import.meta.env.VITE_WS_BASE_URL as string | undefined
+    if (base) {
+      ws = openStream('alerts', onMsg)    // 실제 WS (wss://…)
+      console.log('[WS] real WebSocket connected')
       return () => ws?.close()
     }
 
-    // 둘 다 아니면 아무 것도 연결하지 않음
     return () => {}
-  }, [mswEnabled, push, badge])
+  }, [push, badge])
 
   return (
     <ThemeProvider theme={mode === 'dark' ? themeLight : themeDark}>
