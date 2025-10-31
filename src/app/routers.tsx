@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from '../ui/Layout'
 import OverviewPage from '../pages/overview/OverviewPage'
 import FeedsPage from '../pages/feeds/FeedsPage'
@@ -9,38 +9,41 @@ import RulesPage from '../pages/rules/RulesPage'
 import SettingsPage from '../pages/settings/SettingsPage'
 import LoginPage from '../pages/auth/LoginPage'
 import { useAuthStore } from '../config/auth-store'
-import { Navigate, Outlet } from 'react-router-dom'
-
-function RequireAuth(){
-    const token = useAuthStore(s => s.token)
-    if(!token) return <Navigate to='/login' replace />
-    return <Outlet />
+function RequireAuth() {
+  const token = useAuthStore(s => s.token)
+  const loc = useLocation()
+  if (!token) return <Navigate to="/login" replace state={{ from: loc }} />
+  return <Outlet />
 }
-// 라우팅 정의. URL과 페이지 매핑만 담당.
+
 const router = createBrowserRouter([
-    {path: '/login', element: <LoginPage />},
-    {
+  { path: '/login', element: <LoginPage /> },
+  {
+    element: <RequireAuth />,          
+    children: [
+      {
         path: '/',
-        element: <Layout />,
+        element: <Layout />,            
         children: [
-            {
-                element: <RequireAuth />,
-                children: [
-                    { index: true, element: <OverviewPage /> },
-                    { path: 'feeds', element: <FeedsPage /> },
-                    { path: 'cve', element: <CvePage /> },
-                    { path: 'ioc', element: <IocExplorerPage /> },
-                    { path: 'alerts', element: <AlertsPage /> },
-                    { path: 'rules', element: <RulesPage /> },
-                    { path: 'settings', element: <SettingsPage /> },
-            ]
-            }
+          { index: true, element: <OverviewPage /> },
+          { path: 'feeds', element: <FeedsPage /> },
+          { path: 'cve', element: <CvePage /> },
+          { path: 'ioc', element: <IocExplorerPage /> },
+          { path: 'alerts', element: <AlertsPage /> },
+          { path: 'rules', element: <RulesPage /> },
+          { path: 'settings', element: <SettingsPage /> },
         ],
-    },
-], {
-    basename: import.meta.env.BASE_URL, 
-})
+      },
+    ],
+  },
+], { basename: import.meta.env.BASE_URL })
 
 export function AppRoutes() {
-  return <RouterProvider router={router} />
+  const token = useAuthStore(s => s.token)
+  return (
+    <RouterProvider
+      router={router}
+      key={token ? 'auth' : 'guest'}   // 토큰 전환 시 트리 강제 재생성
+    />
+  )
 }

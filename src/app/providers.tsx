@@ -6,19 +6,16 @@ import { GlobalStyle } from '../styles/global-style'
 import { themeLight, themeDark } from '../styles/theme'
 import { useUiStore } from '../config/ui-store'
 import AuthProvider from '../shared/auth/AuthProvider'
-import { getDemoFlag } from '../lib/demo-flag'
-// 토스트 & 배지
-import { ToastHost, useToasts } from '../ui/Toast'           // Toast.tsx가 src/ui에 있을 때 경로
-import { useAlertBadge } from '../config/alert-badge-store'
 
-// WS (모의/실제)
-import { MockWS, openStream } from '../shared/transport/ws'  // openStream은 실제 WS용(WebSocket 반환)
+import { getDemoFlag } from '../lib/demo-flag'
+import { useAlertBadge } from '../config/alert-badge-store'
+import { ToastProvider, ToastHost, useToasts } from '../ui/Toast'
+import { useAuthStore } from '../config/auth-store'
+import { MockWS, openStream } from '../shared/transport/ws'
 
 export function AppProviders({ children }: { children: ReactNode }) {
-  const mode = useUiStore(s => s.theme)
-  const mswEnabled = useUiStore(s => s.mswEnabled)
+  const mode = useUiStore((s) => s.theme)
 
-  // React Query
   const queryClient = useMemo(
     () =>
       new QueryClient({
@@ -30,50 +27,74 @@ export function AppProviders({ children }: { children: ReactNode }) {
     []
   )
 
-  // Toast & Alerts 배지
-  const { items, push } = useToasts()
-  const badge = useAlertBadge()
+  return (
+    <ThemeProvider theme={mode === 'dark' ? themeDark : themeLight}>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <AuthProvider>
+            <GlobalStyle />
+            {children}
+            <ReactQueryDevtools initialIsOpen={false} position="right" />
+            <ConditionalToastHost />
+            <WsBridge />
+            <LogoutToastCleaner />
+          </AuthProvider>
+        </ToastProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  )
+}
 
-  // 실시간 알림: DEV+MSW면 MockWS, 아니면 실제 WS (열려있을 때만)
+function ConditionalToastHost() {
+  const token = useAuthStore((s) => s.token)
+  return token ? <ToastHost /> : null
+}
+
+function LogoutToastCleaner() {
+  const token = useAuthStore((s) => s.token)
+  const { clear } = useToasts()
   useEffect(() => {
-    const demo = getDemoFlag()            // DEV/PROD 공통 플래그( ?demo=1, localStorage, env )
+    if (!token) clear()
+  }, [token, clear])
+  return null
+}
+
+function WsBridge() {
+  const token = useAuthStore((s) => s.token)
+  const badge = useAlertBadge()
+  const { push } = useToasts()
+
+  useEffect(() => {
+    if (!token) return
+
     const onMsg = (msg: any) => {
       if (msg?.type === 'alert.created') {
+        // 필요하면 토스트 유지/제거 선택
         push(`New alert: ${msg.alert.severity.toUpperCase()} on ${msg.alert.entity}`)
         badge.inc()
       }
     }
 
-    let off: (() => void) | undefined
-    let mock: MockWS | undefined
-    let ws: WebSocket | undefined
-
+    const demo = getDemoFlag()
     if (demo) {
-      mock = new MockWS()
-      mock.start(7000)                    // 7초마다 alert.created 송출
-      off = mock.on(onMsg)
+      const m = new MockWS()
+      m.start(7000)
+      const off = m.on(onMsg)
       console.log('[WS] MockWS enabled (7s)')
-      return () => { off?.(); mock?.stop() }
+      return () => {
+        off()
+        m.stop()
+      }
     }
 
     const base = import.meta.env.VITE_WS_BASE_URL as string | undefined
     if (base) {
-      ws = openStream('alerts', onMsg)    // 실제 WS (wss://…)
+      const ws = openStream('alerts', onMsg)
       console.log('[WS] real WebSocket connected')
-      return () => ws?.close()
+      return () => ws.close()
     }
+    return
+  }, [token, badge, push])
 
-    return () => {}
-  }, [push, badge])
-
-  return (
-    <ThemeProvider theme={mode === 'dark' ? themeLight : themeDark}>
-      <QueryClientProvider client={queryClient}>
-        <GlobalStyle />
-        <AuthProvider>{children}</AuthProvider>
-        <ReactQueryDevtools initialIsOpen={false} position="right" />
-        <ToastHost items={items} />
-      </QueryClientProvider>
-    </ThemeProvider>
-  )
+  return null
 }

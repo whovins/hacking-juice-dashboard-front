@@ -5,7 +5,7 @@ import { useAuthStore } from '../config/auth-store'
 import { useNavigate } from 'react-router-dom'
 import { Button } from './Button'
 import { useAlertBadge } from '../config/alert-badge-store'
-// 간단한 2열 레이아웃과 사이드 내비게이션.
+import { useQueryClient } from '@tanstack/react-query'
 const Shell = styled.div`
   display: grid;
   grid-template-rows: 56px 1fr;
@@ -27,9 +27,19 @@ const Side = styled.nav`
 const Header = styled.header`display:flex; align-items:center; justify-content:space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.08); gap:12px;`
 
 export default function Layout() {
-    const logout = useAuthStore(s => s.logout)
-    const user = useAuthStore(s => s.user)
+
     const navigate = useNavigate()
+    const qc = useQueryClient()
+    const logout = useAuthStore(s => s.logout)
+
+    function onLogout() {
+        logout()      // 토큰/유저 제거 + storage 정리
+        qc.clear()    // 캐시 정리
+        navigate('/login', { replace: true })
+    }
+    
+    
+    const user = useAuthStore(s => s.user)
     const { theme, setTheme } = useUiStore()
 
 
