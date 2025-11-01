@@ -71,7 +71,8 @@ function WsBridge() {
       if (msg?.type === 'alert.created') {
         // 필요하면 토스트 유지/제거 선택
         push(`New alert: ${msg.alert.severity.toUpperCase()} on ${msg.alert.entity}`)
-        badge.inc()
+        const muted = badge.muted;
+        if(!muted) badge.inc();
       }
     }
 

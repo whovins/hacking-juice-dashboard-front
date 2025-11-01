@@ -6,4 +6,5 @@ export type Alert = {
   entity: string
   status: 'open' | 'acked' | 'closed'
   assignee?: string | null
+  matches?: unknown
 }
